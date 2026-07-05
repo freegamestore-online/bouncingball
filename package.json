@@ -1,14 +1,14 @@
 {
-  "name": "APPNAME",
+  "name": "bouncingball",
   "private": true,
   "packageManager": "pnpm@10.30.3",
   "engines": { "node": ">=22" },
   "pnpm": { "onlyBuiltDependencies": ["esbuild"] },
   "scripts": {
-    "dev": "pnpm --filter @APPNAME/web dev",
-    "build": "pnpm --filter @APPNAME/web build",
-    "preview": "pnpm --filter @APPNAME/web preview",
-    "typecheck": "pnpm --filter @APPNAME/web exec tsc -b",
-    "test": "pnpm --filter @APPNAME/web test"
+    "dev": "pnpm --filter @bouncingball/web dev",
+    "build": "pnpm --filter @bouncingball/web build",
+    "preview": "pnpm --filter @bouncingball/web preview",
+    "typecheck": "pnpm --filter @bouncingball/web exec tsc -b",
+    "test": "pnpm --filter @bouncingball/web test"
   }
 }
