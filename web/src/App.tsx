@@ -1,10 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { GameShell, GameTopbar } from "@freegamestore/games";
+import { GameShell, GameTopbar, useGameSounds } from "@freegamestore/games";
 import { useGameLoop } from "./hooks/useGameLoop";
 import { useControls } from "./hooks/useControls";
 import { useHighScore } from "./hooks/useHighScore";
 import { drawGlow, drawText, hexToRgba, randomInRange } from "./lib/canvas";
 import type { Ball, Brick, BrickType, Paddle, Particle, Phase } from "./types";
+
+// useGameSounds reads SoundContext, which GameShell provides internally, so it
+// must be called from a child of GameShell. AudioBridge exposes it via a ref.
+type SoundsApi = ReturnType<typeof useGameSounds>;
+
+function AudioBridge({ apiRef }: { apiRef: React.MutableRefObject<SoundsApi | null> }) {
+  apiRef.current = useGameSounds();
+  return null;
+}
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const BALL_SPEED = 420; // px/s
@@ -106,6 +115,8 @@ export default function App() {
   const phaseRef = useRef<Phase>("menu");
   const levelRef = useRef(1);
   const canvasSizeRef = useRef({ w: 400, h: 600 });
+  const lastMouseXRef = useRef(0);
+  const audioRef = useRef<SoundsApi | null>(null);
 
   // Keep phaseRef in sync
   useEffect(() => { phaseRef.current = phase; }, [phase]);
@@ -181,8 +192,10 @@ export default function App() {
       const inputX = touch.active ? touch.x : mouse.x;
       const rect = canvas.getBoundingClientRect();
       const relX = inputX - rect.left;
-      // Only follow mouse/touch if it moved (not keyboard-only)
-      if (mouse.x !== 0 || touch.active) {
+      // Only follow the mouse on frames where it moved, so arrow keys still work
+      const mouseMoved = mouse.x !== lastMouseXRef.current;
+      lastMouseXRef.current = mouse.x;
+      if (mouseMoved || touch.active) {
         s.paddle.x = Math.max(0, Math.min(w - paddleW, relX - paddleW / 2));
       }
 
@@ -240,10 +253,12 @@ export default function App() {
           const speed = Math.hypot(s.ball.vx, s.ball.vy);
           s.ball.vx = Math.sin(angle) * speed;
           s.ball.vy = -Math.abs(Math.cos(angle) * speed);
+          audioRef.current?.playDrop();
         }
 
         // Bottom → lose
         if (s.ball.y - BALL_RADIUS > h) {
+          audioRef.current?.playGameOver();
           updateHighScore(s.score);
           setDisplayScore(s.score);
           setPhase("lost");
@@ -286,8 +301,10 @@ export default function App() {
             const pts = def.maxHp * 10 * levelRef.current;
             s.score += pts;
             setDisplayScore(s.score);
+            audioRef.current?.playScore();
             s.particles.push(...spawnParticles(brick.x + brick.w / 2, brick.y + brick.h / 2, def.color, 14));
           } else {
+            audioRef.current?.playMove();
             s.particles.push(...spawnParticles(brick.x + brick.w / 2, brick.y + brick.h / 2, def.color, 5));
           }
           break; // one brick per frame
@@ -295,6 +312,7 @@ export default function App() {
 
         // Check win: all bricks gone
         if (s.bricks.every(b => b.hp <= 0)) {
+          audioRef.current?.playLevelUp();
           updateHighScore(s.score);
           setDisplayScore(s.score);
           setPhase("won");
@@ -559,7 +577,7 @@ export default function App() {
         });
       }
     }
-  }, phase !== "playing" && phase !== "won" && phase !== "lost");
+  });
 
   // Click / tap handler for phase transitions
   const handleInteract = useCallback(() => {
@@ -569,7 +587,14 @@ export default function App() {
   }, [startGame, nextLevel]);
 
   return (
-    <GameShell topbar={<GameTopbar title="Brick Breaker" score={displayScore} highScore={highScore} />}>
+    <GameShell topbar={<GameTopbar
+        title="Brick Breaker"
+        stats={[
+          { label: "Score", value: displayScore, accent: true },
+          { label: "Best", value: highScore },
+        ]}
+      />}>
+      <AudioBridge apiRef={audioRef} />
       <div
         ref={containerRef}
         className="w-full h-full relative overflow-hidden cursor-none"
